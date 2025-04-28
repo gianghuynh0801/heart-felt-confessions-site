@@ -6,6 +6,9 @@ PROD_URL="https://eknujhmrispkgzhrywfv.supabase.co"
 PROD_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrbnVqaG1yaXNwa2d6aHJ5d2Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4MjIzNTQsImV4cCI6MjA2MTM5ODM1NH0.aQWyd4sla7_lls6ALGjXciTa0JnieySmWYJNTHM0ZEQ"
 LOCAL_URL="http://localhost:54321"
 LOCAL_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI"
+PROJECT_ID="eknujhmrispkgzhrywfv"
+SCHEMA_FILE="./schema_backup.sql"
+TEMP_DIR="./temp_schema"
 
 # Hàm cập nhật file client.ts
 update_client_file() {
@@ -40,13 +43,89 @@ EOF
     echo "Đã cập nhật file $target_file thành công!"
 }
 
-# Kiểm tra tham số đầu vào
-if [ "$1" = "local" ] || [ "$1" = "prod" ]; then
-    update_client_file $1
-else
-    echo "Sử dụng: $0 [local|prod]"
-    echo "  local: Chuyển sang môi trường Local Supabase"
-    echo "  prod:  Chuyển sang môi trường Production Supabase"
-    exit 1
-fi
+# Kiểm tra Supabase CLI đã được cài đặt chưa
+check_supabase_cli() {
+    if ! command -v supabase &> /dev/null; then
+        echo "Supabase CLI chưa được cài đặt. Vui lòng cài đặt bằng lệnh:"
+        echo "npm install -g supabase"
+        exit 1
+    fi
+}
 
+# Backup schema từ production
+backup_schema() {
+    echo "Đang sao lưu schema từ Supabase production..."
+    
+    # Tạo thư mục tạm nếu chưa tồn tại
+    mkdir -p $TEMP_DIR
+    
+    # Sử dụng Supabase CLI để xuất schema
+    supabase db dump --db-url "postgresql://postgres:postgres@$PROD_URL:5432/postgres" -f $SCHEMA_FILE
+    
+    if [ $? -eq 0 ]; then
+        echo "Sao lưu schema thành công: $SCHEMA_FILE"
+    else
+        echo "Sao lưu schema thất bại!"
+        exit 1
+    fi
+}
+
+# Khôi phục schema vào local
+restore_schema() {
+    echo "Đang khôi phục schema vào Supabase local..."
+    
+    # Khôi phục schema vào local
+    supabase db reset --db-url "postgresql://postgres:postgres@localhost:54321/postgres"
+    
+    if [ $? -eq 0 ]; then
+        echo "Đặt lại cơ sở dữ liệu local thành công"
+    else
+        echo "Đặt lại cơ sở dữ liệu local thất bại!"
+        exit 1
+    fi
+    
+    # Nhập schema từ file đã sao lưu
+    supabase db push --db-url "postgresql://postgres:postgres@localhost:54321/postgres" -f $SCHEMA_FILE
+    
+    if [ $? -eq 0 ]; then
+        echo "Khôi phục schema vào local thành công"
+    else
+        echo "Khôi phục schema vào local thất bại!"
+        exit 1
+    fi
+}
+
+# Hiển thị hướng dẫn sử dụng
+show_usage() {
+    echo "Sử dụng: $0 [local|prod|backup|restore]"
+    echo "  local:   Chuyển sang môi trường Local Supabase"
+    echo "  prod:    Chuyển sang môi trường Production Supabase"
+    echo "  backup:  Sao lưu schema từ Supabase Production"
+    echo "  restore: Khôi phục schema đã sao lưu vào Supabase Local"
+    echo "  sync:    Sao lưu schema từ Production và khôi phục vào Local, sau đó chuyển sang Local"
+    exit 1
+}
+
+# Xử lý tham số đầu vào
+case "$1" in
+    "local"|"prod")
+        update_client_file $1
+        ;;
+    "backup")
+        check_supabase_cli
+        backup_schema
+        ;;
+    "restore")
+        check_supabase_cli
+        restore_schema
+        ;;
+    "sync")
+        check_supabase_cli
+        backup_schema
+        restore_schema
+        update_client_file "local"
+        ;;
+    *)
+        show_usage
+        ;;
+esac
