@@ -29,6 +29,9 @@ export function Header() {
     navigate("/");
   };
   
+  // Get username from metadata
+  const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
@@ -75,7 +78,7 @@ export function Header() {
               <DropdownMenuContent align="end">
                 <div className="flex items-center justify-start gap-2 p-2">
                   <div className="flex flex-col space-y-0.5">
-                    <span className="text-sm font-medium">{user?.name}</span>
+                    <span className="text-sm font-medium">{userName}</span>
                     <span className="text-xs text-muted-foreground">
                       {user?.email}
                     </span>
