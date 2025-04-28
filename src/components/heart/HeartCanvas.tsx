@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -201,9 +200,8 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
-      // Instead of using dot notation, we need to use the schema option in the PostgrestQueryBuilder
+      // Use from() with the full table name including schema
       const { error } = await supabase
-        .schema('heart_db')
         .from('heart_confessions')
         .insert({
           image_data: dataUrl,

@@ -23,9 +23,8 @@ export function HeartGallery() {
 
   const fetchHearts = async () => {
     try {
-      // Use schema method instead of dot notation
+      // Use from() with the table name directly
       const { data, error } = await supabase
-        .schema('heart_db')
         .from('heart_confessions')
         .select('*')
         .order('created_at', { ascending: false });
