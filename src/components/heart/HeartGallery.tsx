@@ -23,13 +23,17 @@ export function HeartGallery() {
 
   const fetchHearts = async () => {
     try {
-      // Use from() with the table name directly
       const { data, error } = await supabase
         .from('heart_confessions')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      if (!data) {
+        console.error('No heart data returned');
+        return;
+      }
 
       const formattedHearts = data.map(heart => ({
         id: heart.id,
@@ -39,6 +43,11 @@ export function HeartGallery() {
       }));
 
       setHearts(formattedHearts);
+      
+      // Auto-select the first heart if available
+      if (formattedHearts.length > 0 && !selectedHeart) {
+        setSelectedHeart(formattedHearts[0]);
+      }
     } catch (error) {
       console.error('Error fetching hearts:', error);
     }

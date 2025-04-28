@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -200,7 +201,6 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
-      // Use from() with the full table name including schema
       const { error } = await supabase
         .from('heart_confessions')
         .insert({
