@@ -9,6 +9,7 @@ LOCAL_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYy
 PROJECT_ID="eknujhmrispkgzhrywfv"
 SCHEMA_FILE="./schema_backup.sql"
 TEMP_DIR="./temp_schema"
+MIGRATION_FILE="./migration_backup.sql"
 
 # Hàm cập nhật file client.ts
 update_client_file() {
@@ -46,20 +47,24 @@ EOF
 # Kiểm tra Supabase CLI đã được cài đặt chưa
 check_supabase_cli() {
     if ! command -v supabase &> /dev/null; then
-        echo "Supabase CLI chưa được cài đặt. Vui lòng cài đặt bằng lệnh:"
-        echo "npm install -g supabase"
+        echo "Supabase CLI chưa được cài đặt. Vui lòng cài đặt theo các bước sau:"
+        echo "1. Cài đặt Supabase CLI:"
+        echo "   npm install -g supabase"
+        echo "2. Login vào Supabase:"
+        echo "   supabase login"
         exit 1
     fi
 }
 
-# Backup schema từ production
+# Backup schema và migration từ production
 backup_schema() {
     echo "Đang sao lưu schema từ Supabase production..."
     
     # Tạo thư mục tạm nếu chưa tồn tại
     mkdir -p $TEMP_DIR
     
-    # Sử dụng Supabase CLI để xuất schema
+    # Sao lưu schema hiện tại
+    echo "Đang sao lưu schema..."
     supabase db dump --db-url "postgresql://postgres:postgres@$PROD_URL:5432/postgres" -f $SCHEMA_FILE
     
     if [ $? -eq 0 ]; then
@@ -68,41 +73,76 @@ backup_schema() {
         echo "Sao lưu schema thất bại!"
         exit 1
     fi
+
+    # Sao lưu migration history
+    echo "Đang sao lưu migration history..."
+    supabase db dump --db-url "postgresql://postgres:postgres@$PROD_URL:5432/postgres" --migration-table -f $MIGRATION_FILE
+    
+    if [ $? -eq 0 ]; then
+        echo "Sao lưu migration history thành công: $MIGRATION_FILE"
+    else
+        echo "Sao lưu migration history thất bại!"
+        exit 1
+    fi
 }
 
 # Khôi phục schema vào local
 restore_schema() {
-    echo "Đang khôi phục schema vào Supabase local..."
+    echo "Đang khôi phục database vào Supabase local..."
     
-    # Khôi phục schema vào local
+    # Reset database local
+    echo "Đang reset database local..."
     supabase db reset --db-url "postgresql://postgres:postgres@localhost:54321/postgres"
     
     if [ $? -eq 0 ]; then
-        echo "Đặt lại cơ sở dữ liệu local thành công"
+        echo "Reset database local thành công"
     else
-        echo "Đặt lại cơ sở dữ liệu local thất bại!"
+        echo "Reset database local thất bại!"
         exit 1
     fi
     
-    # Nhập schema từ file đã sao lưu
+    # Khôi phục schema
+    echo "Đang khôi phục schema..."
     supabase db push --db-url "postgresql://postgres:postgres@localhost:54321/postgres" -f $SCHEMA_FILE
     
     if [ $? -eq 0 ]; then
-        echo "Khôi phục schema vào local thành công"
+        echo "Khôi phục schema thành công"
     else
-        echo "Khôi phục schema vào local thất bại!"
+        echo "Khôi phục schema thất bại!"
         exit 1
+    fi
+    
+    # Khôi phục migration history
+    echo "Đang khôi phục migration history..."
+    supabase db push --db-url "postgresql://postgres:postgres@localhost:54321/postgres" -f $MIGRATION_FILE
+    
+    if [ $? -eq 0 ]; then
+        echo "Khôi phục migration history thành công"
+    else
+        echo "Khôi phục migration history thất bại!"
+        exit 1
+    fi
+}
+
+# Kiểm tra status của Supabase local
+check_local_status() {
+    echo "Kiểm tra trạng thái Supabase local..."
+    supabase status
+    
+    if [ $? -ne 0 ]; then
+        echo "Supabase local chưa được khởi động. Đang khởi động..."
+        supabase start
     fi
 }
 
 # Hiển thị hướng dẫn sử dụng
 show_usage() {
-    echo "Sử dụng: $0 [local|prod|backup|restore]"
+    echo "Sử dụng: $0 [local|prod|backup|restore|sync]"
     echo "  local:   Chuyển sang môi trường Local Supabase"
     echo "  prod:    Chuyển sang môi trường Production Supabase"
-    echo "  backup:  Sao lưu schema từ Supabase Production"
-    echo "  restore: Khôi phục schema đã sao lưu vào Supabase Local"
-    echo "  sync:    Sao lưu schema từ Production và khôi phục vào Local, sau đó chuyển sang Local"
+    echo "  backup:  Sao lưu schema và migration từ Supabase Production"
+    echo "  restore: Khôi phục schema và migration vào Supabase Local"
+    echo "  sync:    Thực hiện toàn bộ quá trình (backup -> restore -> switch to local)"
     exit 1
 }
 
@@ -117,10 +157,12 @@ case "$1" in
         ;;
     "restore")
         check_supabase_cli
+        check_local_status
         restore_schema
         ;;
     "sync")
         check_supabase_cli
+        check_local_status
         backup_schema
         restore_schema
         update_client_file "local"
@@ -129,3 +171,4 @@ case "$1" in
         show_usage
         ;;
 esac
+
