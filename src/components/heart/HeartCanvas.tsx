@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -32,6 +33,7 @@ export function HeartCanvas() {
   const [confessionText, setConfessionText] = useState("");
   const [heartData, setHeartData] = useState<{dataUrl: string, text: string} | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
   
   const colors = [
     "#FF1493", // Deep Pink
@@ -187,6 +189,15 @@ export function HeartCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You must be logged in to save heart confessions.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
@@ -195,6 +206,7 @@ export function HeartCanvas() {
         .insert({
           image_data: dataUrl,
           message: confessionText,
+          user_id: user.id
         });
 
       if (error) throw error;
