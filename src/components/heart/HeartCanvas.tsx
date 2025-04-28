@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -17,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";
 
 interface Point {
   x: number;
@@ -182,18 +182,23 @@ export function HeartCanvas() {
     drawHeartShape(ctx, canvas.width / 2, canvas.height / 2, 100, "#FFF0F5");
   };
 
-  const saveHeart = () => {
+  const saveHeart = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
     try {
       const dataUrl = canvas.toDataURL("image/png");
-      setHeartData({
-        dataUrl,
-        text: confessionText
-      });
+      
+      const { error } = await supabase
+        .from('heart_confessions')
+        .insert({
+          image_data: dataUrl,
+          message: confessionText,
+        });
 
-      // Store in local storage
+      if (error) throw error;
+
+      // Store in local storage for immediate display
       const savedHearts = JSON.parse(localStorage.getItem('savedHearts') || '[]');
       savedHearts.push({
         id: Date.now().toString(),
@@ -202,6 +207,11 @@ export function HeartCanvas() {
         date: new Date().toISOString()
       });
       localStorage.setItem('savedHearts', JSON.stringify(savedHearts));
+
+      setHeartData({
+        dataUrl,
+        text: confessionText
+      });
 
       toast({
         title: "Heart Confession Saved!",

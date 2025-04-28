@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface HeartConfession {
   id: string;
@@ -17,10 +18,30 @@ export function HeartGallery() {
   const { user } = useAuth();
   
   useEffect(() => {
-    // Load saved hearts from localStorage
-    const savedHearts = JSON.parse(localStorage.getItem('savedHearts') || '[]');
-    setHearts(savedHearts);
+    fetchHearts();
   }, []);
+
+  const fetchHearts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('heart_confessions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedHearts = data.map(heart => ({
+        id: heart.id,
+        dataUrl: heart.image_data,
+        text: heart.message || '',
+        date: heart.created_at
+      }));
+
+      setHearts(formattedHearts);
+    } catch (error) {
+      console.error('Error fetching hearts:', error);
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto">

@@ -1,18 +1,15 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-}
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,66 +17,73 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Check if user is logged in from localStorage
-    const storedUser = localStorage.getItem("heartUser");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUser(session?.user ?? null);
+        setIsAuthenticated(!!session?.user);
+      }
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsAuthenticated(!!session?.user);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<void> => {
-    // Mock login - in a real app, you would call an API
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        // Simple validation
-        if (email && password.length >= 6) {
-          const mockUser = {
-            id: `user-${Date.now()}`,
-            email,
-            name: email.split('@')[0],
-          };
-          
-          setUser(mockUser);
-          setIsAuthenticated(true);
-          localStorage.setItem("heartUser", JSON.stringify(mockUser));
-          resolve();
-        } else {
-          reject(new Error("Invalid credentials"));
-        }
-      }, 500);
+  const login = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
-  const signup = async (email: string, password: string, name: string): Promise<void> => {
-    // Mock signup - in a real app, you would call an API
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        // Simple validation
-        if (email && password.length >= 6 && name) {
-          const mockUser = {
-            id: `user-${Date.now()}`,
-            email,
-            name,
-          };
-          
-          setUser(mockUser);
-          setIsAuthenticated(true);
-          localStorage.setItem("heartUser", JSON.stringify(mockUser));
-          resolve();
-        } else {
-          reject(new Error("Invalid registration data"));
-        }
-      }, 500);
+  const signup = async (email: string, password: string, name: string) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+        },
+      },
     });
+    
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem("heartUser");
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
   return (
