@@ -201,9 +201,10 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
-      // Sử dụng schema heart_db thay vì public
+      // Instead of using dot notation, we need to use the schema option in the PostgrestQueryBuilder
       const { error } = await supabase
-        .from('heart_db.heart_confessions')
+        .schema('heart_db')
+        .from('heart_confessions')
         .insert({
           image_data: dataUrl,
           message: confessionText,

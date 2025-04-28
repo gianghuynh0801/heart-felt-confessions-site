@@ -23,9 +23,10 @@ export function HeartGallery() {
 
   const fetchHearts = async () => {
     try {
-      // Sử dụng schema heart_db thay vì public
+      // Use schema method instead of dot notation
       const { data, error } = await supabase
-        .from('heart_db.heart_confessions')
+        .schema('heart_db')
+        .from('heart_confessions')
         .select('*')
         .order('created_at', { ascending: false });
 
