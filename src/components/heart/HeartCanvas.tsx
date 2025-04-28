@@ -201,8 +201,9 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
+      // Sử dụng schema heart_db thay vì public
       const { error } = await supabase
-        .from('heart_confessions')
+        .from('heart_db.heart_confessions')
         .insert({
           image_data: dataUrl,
           message: confessionText,
