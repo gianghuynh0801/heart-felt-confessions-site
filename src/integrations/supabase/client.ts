@@ -5,17 +5,11 @@ import type { Database } from './types';
 
 const SUPABASE_URL = "https://eknujhmrispkgzhrywfv.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrbnVqaG1yaXNwa2d6aHJ5d2Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4MjIzNTQsImV4cCI6MjA2MTM5ODM1NH0.aQWyd4sla7_lls6ALGjXciTa0JnieySmWYJNTHM0ZEQ";
-const SCHEMA = "heart_db";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(
   SUPABASE_URL, 
-  SUPABASE_PUBLISHABLE_KEY,
-  {
-    db: {
-      schema: SCHEMA
-    }
-  }
+  SUPABASE_PUBLISHABLE_KEY
 );

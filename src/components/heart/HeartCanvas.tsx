@@ -201,12 +201,13 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
+      // Fixed: Use the correct column names as defined in the Database type
       const { error } = await supabase
         .from('heart_confessions')
         .insert({
+          user_id: user.id,
           image_data: dataUrl,
-          message: confessionText,
-          user_id: user.id
+          message: confessionText
         });
 
       if (error) throw error;
