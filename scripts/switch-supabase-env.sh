@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Temporary directory and migration file paths
@@ -8,9 +7,12 @@ MIGRATION_FILE="./migration_backup.sql"
 # Function to get schema information interactively
 get_schema_info() {
     echo "Enter your schema isolation details:"
-    read -p "Project Name: " PROJECT_NAME
-    read -p "Schema Name: " SCHEMA_NAME
-    read -p "Database User: " DB_USER
+    read -p "Project Name [heart]: " PROJECT_NAME
+    PROJECT_NAME=${PROJECT_NAME:-"heart"}
+    read -p "Schema Name [heart_db]: " SCHEMA_NAME
+    SCHEMA_NAME=${SCHEMA_NAME:-"heart_db"}
+    read -p "Database User [app_user]: " DB_USER
+    DB_USER=${DB_USER:-"app_user"}
     read -p "Production URL (e.g., xyz.supabase.co): " PROD_URL
     read -p "Production API Key: " PROD_KEY
     read -p "Production DB Password (for Session pooler): " PROD_DB_PASSWORD
