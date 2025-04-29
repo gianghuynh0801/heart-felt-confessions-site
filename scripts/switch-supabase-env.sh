@@ -13,13 +13,11 @@ get_schema_info() {
     read -p "Database User: " DB_USER
     read -p "Production URL (e.g., xyz.supabase.co): " PROD_URL
     read -p "Production API Key: " PROD_KEY
+    read -p "Production DB Password (for Session pooler): " PROD_DB_PASSWORD
     read -p "Local URL [http://localhost:54321]: " LOCAL_URL
     LOCAL_URL=${LOCAL_URL:-"http://localhost:54321"}
     read -p "Local API Key [eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI]: " LOCAL_KEY
     LOCAL_KEY=${LOCAL_KEY:-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI"}
-    
-    # Read database password for pooler connections
-    read -p "Production DB Password (for Session pooler): " PROD_DB_PASSWORD
     
     # Create temp directory if it doesn't exist
     mkdir -p $TEMP_DIR
@@ -27,6 +25,7 @@ get_schema_info() {
     # Set schema file path
     SCHEMA_FILE="$TEMP_DIR/${PROJECT_NAME}_schema.sql"
     DATA_FILE="$TEMP_DIR/${PROJECT_NAME}_data.sql"
+    RLS_FILE="$TEMP_DIR/${PROJECT_NAME}_rls.sql"
     
     echo "Processing schema migration for:"
     echo "- Project: $PROJECT_NAME"
@@ -81,35 +80,35 @@ check_supabase_cli() {
     fi
 }
 
-# Backup schema from production using pooler
-backup_schema() {
-    echo "Backing up schema $SCHEMA_NAME from Supabase production..."
+# Export schema and data from production using Session pooler
+export_database() {
+    echo "Exporting schema $SCHEMA_NAME from Supabase production..."
     
-    # Use pooler connection for improved performance
+    # Use Session pooler connection for improved performance
     local POOLER_CONNECTION="postgresql://$DB_USER:$PROD_DB_PASSWORD@$PROD_URL:6543/postgres?search_path=$SCHEMA_NAME"
     
-    # Backup schema structure
-    echo "Backing up schema structure..."
+    # Export schema structure
+    echo "Exporting schema structure..."
     PGPASSWORD="$PROD_DB_PASSWORD" pg_dump -h $PROD_URL -p 6543 -U $DB_USER -n $SCHEMA_NAME --schema-only --no-owner --no-privileges postgres > "$SCHEMA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Schema structure backup failed"
+        echo "Error: Schema structure export failed"
         exit 1
     fi
-    echo "Schema structure backup successful: $SCHEMA_FILE"
+    echo "Schema structure exported successfully: $SCHEMA_FILE"
     
-    # Backup data
-    echo "Backing up schema data..."
+    # Export data
+    echo "Exporting schema data..."
     PGPASSWORD="$PROD_DB_PASSWORD" pg_dump -h $PROD_URL -p 6543 -U $DB_USER -n $SCHEMA_NAME --data-only --no-owner --no-privileges postgres > "$DATA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Data backup failed"
+        echo "Error: Data export failed"
         exit 1
     fi
-    echo "Data backup successful: $DATA_FILE"
+    echo "Data exported successfully: $DATA_FILE"
 
-    # Backup RLS policies
-    echo "Backing up RLS policies..."
+    # Export RLS policies
+    echo "Exporting RLS policies..."
     PGPASSWORD="$PROD_DB_PASSWORD" psql -h $PROD_URL -p 6543 -U $DB_USER -d postgres -t -c "
         SELECT 'CREATE POLICY ' || 
                quote_ident(policyname) || ' ON ' || 
@@ -120,18 +119,23 @@ backup_schema() {
                ' USING (' || qual || ')' || 
                CASE WHEN with_check IS NOT NULL THEN ' WITH CHECK (' || with_check || ')' ELSE '' END || ';'
         FROM pg_policies 
-        WHERE schemaname = '$SCHEMA_NAME';" > "$TEMP_DIR/${PROJECT_NAME}_rls.sql"
+        WHERE schemaname = '$SCHEMA_NAME';" > "$RLS_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: RLS policies backup failed"
+        echo "Error: RLS policies export failed"
         exit 1
     fi
-    echo "RLS policies backup successful: $TEMP_DIR/${PROJECT_NAME}_rls.sql"
+    echo "RLS policies exported successfully: $RLS_FILE"
+    
+    echo "Database export completed successfully to:"
+    echo "- Schema: $SCHEMA_FILE"
+    echo "- Data: $DATA_FILE"
+    echo "- RLS Policies: $RLS_FILE"
 }
 
-# Restore schema to local
-restore_schema() {
-    echo "Restoring schema $SCHEMA_NAME to local Supabase..."
+# Import schema to local
+import_schema() {
+    echo "Importing schema $SCHEMA_NAME to local Supabase..."
     
     # Create the schema if it doesn't exist
     psql "postgresql://postgres:postgres@localhost:54321/postgres" -c "CREATE SCHEMA IF NOT EXISTS $SCHEMA_NAME;" 
@@ -141,30 +145,30 @@ restore_schema() {
         exit 1
     fi
     
-    # Restore schema structure
-    echo "Restoring schema structure..."
+    # Import schema structure
+    echo "Importing schema structure..."
     psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$SCHEMA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Schema structure restore failed"
+        echo "Error: Schema structure import failed"
         exit 1
     fi
     
-    # Restore data
-    echo "Restoring data..."
+    # Import data
+    echo "Importing data..."
     psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$DATA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Data restore failed"
+        echo "Error: Data import failed"
         exit 1
     fi
     
-    # Restore RLS policies
-    echo "Restoring RLS policies..."
-    psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$TEMP_DIR/${PROJECT_NAME}_rls.sql"
+    # Import RLS policies
+    echo "Importing RLS policies..."
+    psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$RLS_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: RLS policies restore failed"
+        echo "Error: RLS policies import failed"
         exit 1
     fi
 
@@ -222,6 +226,7 @@ EOF
         exit 1
     fi
     echo "User isolation configured successfully for $DB_USER on schema $SCHEMA_NAME"
+    echo "Import completed successfully!"
 }
 
 # Check local Supabase status
@@ -239,11 +244,11 @@ check_local_status() {
 show_usage() {
     echo "Usage: $0 <command>"
     echo "Commands:"
+    echo "  export    - Export schema and data from Production using Session pooler"
+    echo "  import    - Import schema and data to Local with user isolation"
     echo "  local     - Switch to Local Supabase and configure schema/user isolation"
     echo "  prod      - Switch to Production Supabase"
-    echo "  backup    - Backup schema and data from Production using Session pooler"
-    echo "  restore   - Restore schema and data to Local with user isolation"
-    echo "  sync      - Full sync (backup -> restore -> switch to local)"
+    echo "  sync      - Full sync (export -> import -> switch to local)"
     exit 1
 }
 
@@ -259,23 +264,25 @@ case "$COMMAND" in
     "local"|"prod")
         update_client_file $COMMAND
         ;;
-    "backup")
-        check_supabase_cli
-        backup_schema
+    "export")
+        export_database
         ;;
-    "restore")
+    "import")
         check_supabase_cli
         check_local_status
-        restore_schema
+        import_schema
         ;;
     "sync")
         check_supabase_cli
         check_local_status
-        backup_schema
-        restore_schema
+        export_database
+        import_schema
         update_client_file "local"
+        echo "Full sync completed successfully! Your local environment is now set up with data from production."
         ;;
     *)
         show_usage
         ;;
 esac
+
+echo "Operation completed successfully!"
