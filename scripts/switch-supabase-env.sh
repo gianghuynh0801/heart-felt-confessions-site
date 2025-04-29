@@ -5,21 +5,28 @@
 TEMP_DIR="./temp_schema"
 MIGRATION_FILE="./migration_backup.sql"
 
-# Function to get schema information as parameters
+# Function to get schema information interactively
 get_schema_info() {
-    PROJECT_NAME=$1
-    SCHEMA_NAME=$2
-    DB_USER=$3
-    PROD_URL=$4
-    PROD_KEY=$5
-    LOCAL_URL=${6:-"http://localhost:54321"}
-    LOCAL_KEY=${7:-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI"}
+    echo "Enter your schema isolation details:"
+    read -p "Project Name: " PROJECT_NAME
+    read -p "Schema Name: " SCHEMA_NAME
+    read -p "Database User: " DB_USER
+    read -p "Production URL (e.g., xyz.supabase.co): " PROD_URL
+    read -p "Production API Key: " PROD_KEY
+    read -p "Local URL [http://localhost:54321]: " LOCAL_URL
+    LOCAL_URL=${LOCAL_URL:-"http://localhost:54321"}
+    read -p "Local API Key [eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI]: " LOCAL_KEY
+    LOCAL_KEY=${LOCAL_KEY:-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI"}
+    
+    # Read database password for pooler connections
+    read -p "Production DB Password (for Session pooler): " PROD_DB_PASSWORD
     
     # Create temp directory if it doesn't exist
     mkdir -p $TEMP_DIR
     
     # Set schema file path
     SCHEMA_FILE="$TEMP_DIR/${PROJECT_NAME}_schema.sql"
+    DATA_FILE="$TEMP_DIR/${PROJECT_NAME}_data.sql"
     
     echo "Processing schema migration for:"
     echo "- Project: $PROJECT_NAME"
@@ -27,7 +34,7 @@ get_schema_info() {
     echo "- User: $DB_USER"
 }
 
-# Function to update client.ts
+# Function to update client.ts with schema information
 update_client_file() {
     local env=$1
     local target_file="src/integrations/supabase/client.ts"
@@ -74,84 +81,147 @@ check_supabase_cli() {
     fi
 }
 
-# Backup schema from production
+# Backup schema from production using pooler
 backup_schema() {
     echo "Backing up schema $SCHEMA_NAME from Supabase production..."
     
-    # Backup current schema
-    supabase db dump \
-        --db-url "postgresql://postgres:postgres@$PROD_URL:5432/postgres" \
-        --schema "$SCHEMA_NAME" \
-        -f "$SCHEMA_FILE"
+    # Use pooler connection for improved performance
+    local POOLER_CONNECTION="postgresql://$DB_USER:$PROD_DB_PASSWORD@$PROD_URL:6543/postgres?search_path=$SCHEMA_NAME"
+    
+    # Backup schema structure
+    echo "Backing up schema structure..."
+    PGPASSWORD="$PROD_DB_PASSWORD" pg_dump -h $PROD_URL -p 6543 -U $DB_USER -n $SCHEMA_NAME --schema-only --no-owner --no-privileges postgres > "$SCHEMA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Schema backup failed"
+        echo "Error: Schema structure backup failed"
         exit 1
     fi
-    echo "Schema backup successful: $SCHEMA_FILE"
+    echo "Schema structure backup successful: $SCHEMA_FILE"
+    
+    # Backup data
+    echo "Backing up schema data..."
+    PGPASSWORD="$PROD_DB_PASSWORD" pg_dump -h $PROD_URL -p 6543 -U $DB_USER -n $SCHEMA_NAME --data-only --no-owner --no-privileges postgres > "$DATA_FILE"
+    
+    if [ $? -ne 0 ]; then
+        echo "Error: Data backup failed"
+        exit 1
+    fi
+    echo "Data backup successful: $DATA_FILE"
 
-    # Backup migration history
-    supabase db dump \
-        --db-url "postgresql://postgres:postgres@$PROD_URL:5432/postgres" \
-        --schema "$SCHEMA_NAME" \
-        --migration-table \
-        -f "${SCHEMA_FILE}.migration"
+    # Backup RLS policies
+    echo "Backing up RLS policies..."
+    PGPASSWORD="$PROD_DB_PASSWORD" psql -h $PROD_URL -p 6543 -U $DB_USER -d postgres -t -c "
+        SELECT 'CREATE POLICY ' || 
+               quote_ident(policyname) || ' ON ' || 
+               quote_ident(schemaname) || '.' || quote_ident(tablename) || 
+               ' AS ' || permissive || 
+               ' FOR ' || cmd || 
+               ' TO ' || roles || 
+               ' USING (' || qual || ')' || 
+               CASE WHEN with_check IS NOT NULL THEN ' WITH CHECK (' || with_check || ')' ELSE '' END || ';'
+        FROM pg_policies 
+        WHERE schemaname = '$SCHEMA_NAME';" > "$TEMP_DIR/${PROJECT_NAME}_rls.sql"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Migration history backup failed"
+        echo "Error: RLS policies backup failed"
         exit 1
     fi
-    echo "Migration history backup successful: ${SCHEMA_FILE}.migration"
+    echo "RLS policies backup successful: $TEMP_DIR/${PROJECT_NAME}_rls.sql"
 }
 
 # Restore schema to local
 restore_schema() {
     echo "Restoring schema $SCHEMA_NAME to local Supabase..."
     
-    # Reset local schema
-    supabase db reset \
-        --db-url "postgresql://postgres:postgres@localhost:54321/postgres" \
-        --schema "$SCHEMA_NAME"
+    # Create the schema if it doesn't exist
+    psql "postgresql://postgres:postgres@localhost:54321/postgres" -c "CREATE SCHEMA IF NOT EXISTS $SCHEMA_NAME;" 
     
     if [ $? -ne 0 ]; then
-        echo "Error: Local schema reset failed"
+        echo "Error: Failed to create schema"
         exit 1
     fi
     
-    # Restore schema
-    supabase db push \
-        --db-url "postgresql://postgres:postgres@localhost:54321/postgres" \
-        --schema "$SCHEMA_NAME" \
-        -f "$SCHEMA_FILE"
+    # Restore schema structure
+    echo "Restoring schema structure..."
+    psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$SCHEMA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Schema restore failed"
+        echo "Error: Schema structure restore failed"
         exit 1
     fi
     
-    # Restore migration history
-    supabase db push \
-        --db-url "postgresql://postgres:postgres@localhost:54321/postgres" \
-        --schema "$SCHEMA_NAME" \
-        -f "${SCHEMA_FILE}.migration"
+    # Restore data
+    echo "Restoring data..."
+    psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$DATA_FILE"
     
     if [ $? -ne 0 ]; then
-        echo "Error: Migration history restore failed"
+        echo "Error: Data restore failed"
+        exit 1
+    fi
+    
+    # Restore RLS policies
+    echo "Restoring RLS policies..."
+    psql "postgresql://postgres:postgres@localhost:54321/postgres" -f "$TEMP_DIR/${PROJECT_NAME}_rls.sql"
+    
+    if [ $? -ne 0 ]; then
+        echo "Error: RLS policies restore failed"
         exit 1
     fi
 
-    # Grant permissions
+    # Configure user isolation
+    echo "Configuring user isolation for $DB_USER on schema $SCHEMA_NAME..."
     psql "postgresql://postgres:postgres@localhost:54321/postgres" << EOF
+-- Create the user if it doesn't exist
+DO \$\$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$DB_USER') THEN
+        CREATE ROLE $DB_USER WITH LOGIN PASSWORD 'local_password';
+    END IF;
+END
+\$\$;
+
+-- Revoke all permissions first to ensure clean slate
+REVOKE ALL PRIVILEGES ON SCHEMA $SCHEMA_NAME FROM PUBLIC, $DB_USER;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA $SCHEMA_NAME FROM PUBLIC, $DB_USER;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA $SCHEMA_NAME FROM PUBLIC, $DB_USER;
+REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA $SCHEMA_NAME FROM PUBLIC, $DB_USER;
+
+-- Grant specific permissions to the user
 GRANT USAGE ON SCHEMA $SCHEMA_NAME TO $DB_USER;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA $SCHEMA_NAME TO $DB_USER;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA $SCHEMA_NAME TO $DB_USER;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA $SCHEMA_NAME TO $DB_USER;
+
+-- Set default privileges for future objects
+ALTER DEFAULT PRIVILEGES IN SCHEMA $SCHEMA_NAME 
+GRANT ALL PRIVILEGES ON TABLES TO $DB_USER;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA $SCHEMA_NAME 
+GRANT ALL PRIVILEGES ON SEQUENCES TO $DB_USER;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA $SCHEMA_NAME 
+GRANT EXECUTE ON FUNCTIONS TO $DB_USER;
+
+-- Enable Row Level Security on all tables
+DO \$\$
+DECLARE
+    table_record RECORD;
+BEGIN
+    FOR table_record IN 
+        SELECT tablename 
+        FROM pg_tables 
+        WHERE schemaname = '$SCHEMA_NAME'
+    LOOP
+        EXECUTE 'ALTER TABLE $SCHEMA_NAME.' || quote_ident(table_record.tablename) || ' ENABLE ROW LEVEL SECURITY;';
+    END LOOP;
+END \$\$;
 EOF
     
     if [ $? -ne 0 ]; then
-        echo "Error: Permission grant failed"
+        echo "Error: User isolation configuration failed"
         exit 1
     fi
-    echo "Permissions granted to $DB_USER on schema $SCHEMA_NAME"
+    echo "User isolation configured successfully for $DB_USER on schema $SCHEMA_NAME"
 }
 
 # Check local Supabase status
@@ -167,31 +237,23 @@ check_local_status() {
 
 # Show usage instructions
 show_usage() {
-    echo "Usage: $0 <command> <project_name> <schema_name> <db_user> <prod_url> <prod_key> [local_url] [local_key]"
+    echo "Usage: $0 <command>"
     echo "Commands:"
-    echo "  local     - Switch to Local Supabase"
+    echo "  local     - Switch to Local Supabase and configure schema/user isolation"
     echo "  prod      - Switch to Production Supabase"
-    echo "  backup    - Backup schema from Production"
-    echo "  restore   - Restore schema to Local"
+    echo "  backup    - Backup schema and data from Production using Session pooler"
+    echo "  restore   - Restore schema and data to Local with user isolation"
     echo "  sync      - Full sync (backup -> restore -> switch to local)"
     exit 1
 }
 
 # Main script execution
-if [ $# -lt 6 ]; then
+if [ $# -lt 1 ]; then
     show_usage
 fi
 
 COMMAND=$1
-PROJECT_NAME=$2
-SCHEMA_NAME=$3
-DB_USER=$4
-PROD_URL=$5
-PROD_KEY=$6
-LOCAL_URL=${7:-"http://localhost:54321"}
-LOCAL_KEY=${8:-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI"}
-
-get_schema_info "$PROJECT_NAME" "$SCHEMA_NAME" "$DB_USER" "$PROD_URL" "$PROD_KEY" "$LOCAL_URL" "$LOCAL_KEY"
+get_schema_info
 
 case "$COMMAND" in
     "local"|"prod")
@@ -217,4 +279,3 @@ case "$COMMAND" in
         show_usage
         ;;
 esac
-
