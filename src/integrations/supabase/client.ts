@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "http://localhost:54321";
+const SUPABASE_URL = "http://125.253.113.100:54321";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI";
 const SCHEMA = "public"; // We'll set this back to public to match the Database type but use schema in headers
 

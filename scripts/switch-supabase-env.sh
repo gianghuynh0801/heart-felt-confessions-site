@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Temporary directory and migration file paths
@@ -17,8 +16,8 @@ get_schema_info() {
     read -p "Production URL (e.g., xyz.supabase.co): " PROD_URL
     read -p "Production API Key: " PROD_KEY
     read -p "Production DB Password (for Session pooler): " PROD_DB_PASSWORD
-    read -p "Local URL [http://localhost:54321]: " LOCAL_URL
-    LOCAL_URL=${LOCAL_URL:-"http://localhost:54321"}
+    read -p "Local URL [http://125.253.113.100:54321]: " LOCAL_URL
+    LOCAL_URL=${LOCAL_URL:-"http://125.253.113.100:54321"}
     read -p "Local API Key [eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI]: " LOCAL_KEY
     LOCAL_KEY=${LOCAL_KEY:-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI"}
     
