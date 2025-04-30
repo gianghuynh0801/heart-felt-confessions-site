@@ -5,7 +5,7 @@ import type { Database } from './types';
 
 const SUPABASE_URL = "http://localhost:54321";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTYyMjYxNDgyMiwiZXhwIjoxOTM4MTkwODIyfQ.ZDj4ZPXzyQy6LA7WL5RqWzF1NEg-QmP5ABHrGa_LBQI";
-const SCHEMA = "heart_db";
+const SCHEMA = "public"; // We'll set this back to public to match the Database type but use schema in headers
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,11 @@ export const supabase = createClient<Database>(
   {
     db: {
       schema: SCHEMA
+    },
+    global: {
+      headers: {
+        'x-schema': 'heart_db' // Set the schema via headers instead
+      }
     }
   }
 );

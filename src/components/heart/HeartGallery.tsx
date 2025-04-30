@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
 interface HeartConfession {
   id: string;
@@ -30,12 +31,12 @@ export function HeartGallery() {
 
       if (error) throw error;
       
-      if (!data) {
-        console.error('No heart data returned');
+      if (!data || !Array.isArray(data)) {
+        console.error('No heart data returned or invalid format:', data);
         return;
       }
 
-      const formattedHearts = data.map(heart => ({
+      const formattedHearts = data.map((heart: Database['public']['Tables']['heart_confessions']['Row']) => ({
         id: heart.id,
         dataUrl: heart.image_data,
         text: heart.message || '',

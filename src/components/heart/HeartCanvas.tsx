@@ -19,6 +19,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import type { Database } from "@/integrations/supabase/types";
 
 interface Point {
   x: number;
@@ -201,14 +202,16 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
-      // Fixed: Use the correct column names as defined in the Database type
+      // Fixed: Use correct type for insert
+      const insertData: Database['public']['Tables']['heart_confessions']['Insert'] = {
+        user_id: user.id,
+        image_data: dataUrl,
+        message: confessionText || null
+      };
+
       const { error } = await supabase
         .from('heart_confessions')
-        .insert({
-          user_id: user.id,
-          image_data: dataUrl,
-          message: confessionText
-        });
+        .insert(insertData);
 
       if (error) throw error;
 
