@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Temporary directory and migration file paths
@@ -58,6 +59,9 @@ import type { Database } from './types';
 const SUPABASE_URL = "${url}";
 const SUPABASE_PUBLISHABLE_KEY = "${key}";
 const SCHEMA = "${SCHEMA_NAME}";
+
+// Import the supabase client like this:
+// import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(
     SUPABASE_URL, 
