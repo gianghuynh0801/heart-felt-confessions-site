@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -29,8 +28,8 @@ export function Header() {
     navigate("/");
   };
   
-  // Get username from metadata
-  const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  // Get username from user data
+  const userName = user?.name || user?.email?.split('@')[0] || 'User';
   
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

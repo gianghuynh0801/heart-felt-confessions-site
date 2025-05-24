@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,7 @@ export function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const { login, signup, isAuthenticated } = useAuth();
+  const { login, signup } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -23,7 +22,6 @@ export function AuthForm() {
     
     try {
       if (isLogin) {
-        // Mock login
         await login(email, password);
         toast({
           title: "Welcome back!",
@@ -31,7 +29,6 @@ export function AuthForm() {
         });
         navigate("/draw");
       } else {
-        // Mock signup
         await signup(email, password, name);
         toast({
           title: "Welcome!",
@@ -40,11 +37,7 @@ export function AuthForm() {
         navigate("/draw");
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Authentication failed. Please try again.",
-        variant: "destructive",
-      });
+      // Error handling is done in the auth service
     }
   };
 
