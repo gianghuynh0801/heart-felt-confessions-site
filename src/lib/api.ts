@@ -1,5 +1,6 @@
-// PostgREST API configuration
-const API_BASE_URL = import.meta.env.VITE_POSTGREST_URL || 'http://localhost:3000';
+
+// API backend configuration (Express)
+const API_BASE_URL = "/api"; // Tất cả request tới backend Express proxy
 
 interface ApiResponse<T> {
   data: T | null;
