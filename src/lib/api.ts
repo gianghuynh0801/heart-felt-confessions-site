@@ -33,17 +33,17 @@ export const api = {
   },
 
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'GET' });
+    return api.request<T>(endpoint, { method: 'GET' });
   },
 
   async post<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, {
+    return api.request<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(body),
     });
   },
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+    return api.request<T>(endpoint, { method: 'DELETE' });
   }
 };
