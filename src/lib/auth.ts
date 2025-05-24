@@ -1,6 +1,5 @@
 
-import bcrypt from 'bcryptjs';
-import db from './database';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface User {
   id: string;
@@ -18,31 +17,32 @@ export interface AuthResponse {
 export const authService = {
   async signUp(email: string, password: string, name: string): Promise<AuthResponse> {
     try {
-      // Check if user already exists
-      const existingUser = await db.query(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
-      );
+      // Use Supabase Auth for user registration
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name
+          }
+        }
+      });
 
-      if (existingUser.rows.length > 0) {
-        return { user: null, error: 'User already exists with this email' };
+      if (authError) {
+        return { user: null, error: authError.message };
       }
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+      if (!authData.user) {
+        return { user: null, error: 'Failed to create user' };
+      }
 
-      // Create user
-      const result = await db.query(
-        `INSERT INTO users (email, password_hash, name, role, created_at) 
-         VALUES ($1, $2, $3, $4, NOW()) 
-         RETURNING id, email, name, role, created_at`,
-        [email, hashedPassword, name, 'user']
-      );
-
-      const userData = result.rows[0];
+      // The profile will be created automatically via the trigger
       const user: User = {
-        ...userData,
-        created_at: new Date(userData.created_at)
+        id: authData.user.id,
+        email: authData.user.email || email,
+        name: name,
+        role: 'user',
+        created_at: new Date(authData.user.created_at)
       };
       
       return { user, error: null };
@@ -54,29 +54,37 @@ export const authService = {
 
   async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
-      const result = await db.query(
-        'SELECT id, email, name, role, password_hash, created_at FROM users WHERE email = $1',
-        [email]
-      );
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-      if (result.rows.length === 0) {
+      if (authError) {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      const userData = result.rows[0];
-      const isValidPassword = await bcrypt.compare(password, userData.password_hash);
-
-      if (!isValidPassword) {
+      if (!authData.user) {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      // Remove password_hash from response and convert created_at to Date
+      // Get the user profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+        return { user: null, error: 'Failed to get user profile' };
+      }
+
       const user: User = {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role,
-        created_at: new Date(userData.created_at)
+        id: authData.user.id,
+        email: authData.user.email || email,
+        name: profileData?.name || email,
+        role: profileData?.role || 'user',
+        created_at: new Date(authData.user.created_at)
       };
       
       return { user, error: null };
@@ -88,19 +96,22 @@ export const authService = {
 
   async getCurrentUser(userId: string): Promise<User | null> {
     try {
-      const result = await db.query(
-        'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
-        [userId]
-      );
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-      if (result.rows.length === 0) {
+      if (error || !profileData) {
         return null;
       }
 
-      const userData = result.rows[0];
       return {
-        ...userData,
-        created_at: new Date(userData.created_at)
+        id: profileData.id,
+        email: profileData.email,
+        name: profileData.name,
+        role: profileData.role,
+        created_at: new Date(profileData.created_at)
       };
     } catch (error) {
       console.error('Get current user error:', error);
