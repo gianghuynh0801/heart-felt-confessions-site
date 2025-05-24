@@ -58,10 +58,18 @@ app.post("/api/profiles", async (req, res) => {
 
 // API: Lấy thông tin user theo email hoặc id
 app.get("/api/profiles", async (req, res) => {
-  const { email, id } = req.query;
+  let { email, id } = req.query;
 
   if (!email && !id) {
     return res.status(400).json({ error: "Query 'email' hoặc 'id' parameter is required" });
+  }
+
+  // Loại bỏ "eq." prefix nếu có trong query
+  if (typeof email === "string" && email.startsWith("eq.")) {
+    email = email.substring(3);
+  }
+  if (typeof id === "string" && id.startsWith("eq.")) {
+    id = id.substring(3);
   }
 
   try {
@@ -77,6 +85,7 @@ app.get("/api/profiles", async (req, res) => {
         [id]
       );
     }
+    // Nếu không có hàng nào, trả array rỗng (tránh res.status(404))
     res.status(200).json(result.rows);
   } catch (error) {
     console.error("Get profile error:", error);
