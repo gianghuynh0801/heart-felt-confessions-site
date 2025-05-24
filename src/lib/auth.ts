@@ -1,5 +1,6 @@
 
-import { supabase } from '@/integrations/supabase/client';
+import bcrypt from 'bcryptjs';
+import db from './database';
 
 export interface User {
   id: string;
@@ -17,34 +18,28 @@ export interface AuthResponse {
 export const authService = {
   async signUp(email: string, password: string, name: string): Promise<AuthResponse> {
     try {
-      // Use Supabase Auth for user registration
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name: name
-          }
-        }
-      });
+      // Check if user already exists
+      const existingUser = await db.query(
+        'SELECT id FROM users WHERE email = $1',
+        [email]
+      );
 
-      if (authError) {
-        return { user: null, error: authError.message };
+      if (existingUser.rows.length > 0) {
+        return { user: null, error: 'User already exists with this email' };
       }
 
-      if (!authData.user) {
-        return { user: null, error: 'Failed to create user' };
-      }
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-      // The profile will be created automatically via the trigger
-      const user: User = {
-        id: authData.user.id,
-        email: authData.user.email || email,
-        name: name,
-        role: 'user',
-        created_at: new Date(authData.user.created_at)
-      };
-      
+      // Create user
+      const result = await db.query(
+        `INSERT INTO users (email, password_hash, name, role, created_at) 
+         VALUES ($1, $2, $3, $4, NOW()) 
+         RETURNING id, email, name, role, created_at`,
+        [email, hashedPassword, name, 'user']
+      );
+
+      const user = result.rows[0];
       return { user, error: null };
     } catch (error) {
       console.error('Signup error:', error);
@@ -54,40 +49,25 @@ export const authService = {
 
   async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const result = await db.query(
+        'SELECT id, email, name, role, password_hash, created_at FROM users WHERE email = $1',
+        [email]
+      );
 
-      if (authError) {
+      if (result.rows.length === 0) {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      if (!authData.user) {
+      const user = result.rows[0];
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+      if (!isValidPassword) {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      // Get the user profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('Profile fetch error:', profileError);
-        return { user: null, error: 'Failed to get user profile' };
-      }
-
-      const user: User = {
-        id: authData.user.id,
-        email: authData.user.email || email,
-        name: profileData?.name || email,
-        role: profileData?.role || 'user',
-        created_at: new Date(authData.user.created_at)
-      };
-      
-      return { user, error: null };
+      // Remove password_hash from response
+      const { password_hash, ...userWithoutPassword } = user;
+      return { user: userWithoutPassword, error: null };
     } catch (error) {
       console.error('Signin error:', error);
       return { user: null, error: 'Failed to sign in' };
@@ -96,23 +76,12 @@ export const authService = {
 
   async getCurrentUser(userId: string): Promise<User | null> {
     try {
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const result = await db.query(
+        'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
+        [userId]
+      );
 
-      if (error || !profileData) {
-        return null;
-      }
-
-      return {
-        id: profileData.id,
-        email: profileData.email,
-        name: profileData.name,
-        role: profileData.role,
-        created_at: new Date(profileData.created_at)
-      };
+      return result.rows[0] || null;
     } catch (error) {
       console.error('Get current user error:', error);
       return null;
