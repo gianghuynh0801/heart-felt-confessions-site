@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -17,9 +16,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { heartsService } from "@/lib/hearts";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Database } from "@/integrations/supabase/types";
 
 interface Point {
   x: number;
@@ -202,26 +200,23 @@ export function HeartCanvas() {
     try {
       const dataUrl = canvas.toDataURL("image/png");
       
-      // Fixed: Use correct type for insert
-      const insertData: Database['public']['Tables']['heart_confessions']['Insert'] = {
-        user_id: user.id,
-        image_data: dataUrl,
-        message: confessionText || null
-      };
+      const result = await heartsService.createConfession(
+        user.id,
+        confessionText || '',
+        dataUrl
+      );
 
-      const { error } = await supabase
-        .from('heart_confessions')
-        .insert(insertData);
-
-      if (error) throw error;
+      if (!result) {
+        throw new Error('Failed to save heart confession');
+      }
 
       // Store in local storage for immediate display
       const savedHearts = JSON.parse(localStorage.getItem('savedHearts') || '[]');
       savedHearts.push({
-        id: Date.now().toString(),
+        id: result.id,
         dataUrl,
         text: confessionText,
-        date: new Date().toISOString()
+        date: result.created_at.toISOString()
       });
       localStorage.setItem('savedHearts', JSON.stringify(savedHearts));
 

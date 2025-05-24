@@ -1,10 +1,8 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { heartsService } from "@/lib/hearts";
 
 interface HeartConfession {
   id: string;
@@ -20,27 +18,27 @@ export function HeartGallery() {
   
   useEffect(() => {
     fetchHearts();
-  }, []);
+  }, [user]);
 
   const fetchHearts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('heart_confessions')
-        .select('*')
-        .order('created_at', { ascending: false });
+    if (!user) {
+      console.log('No user, skipping heart fetch');
+      return;
+    }
 
-      if (error) throw error;
+    try {
+      const data = await heartsService.getUserConfessions(user.id);
       
       if (!data || !Array.isArray(data)) {
         console.error('No heart data returned or invalid format:', data);
         return;
       }
 
-      const formattedHearts = data.map((heart: Database['public']['Tables']['heart_confessions']['Row']) => ({
+      const formattedHearts = data.map((heart) => ({
         id: heart.id,
         dataUrl: heart.image_data,
         text: heart.message || '',
-        date: heart.created_at
+        date: heart.created_at.toISOString()
       }));
 
       setHearts(formattedHearts);
