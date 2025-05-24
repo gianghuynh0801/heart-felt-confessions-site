@@ -1,5 +1,5 @@
 
-import db from './database';
+import { api } from './api';
 
 export interface HeartConfession {
   id: string;
@@ -13,14 +13,22 @@ export interface HeartConfession {
 export const heartsService = {
   async createConfession(userId: string, message: string, imageData: string): Promise<HeartConfession | null> {
     try {
-      const result = await db.query(
-        `INSERT INTO heart_confessions (user_id, message, image_data, created_at, updated_at) 
-         VALUES ($1, $2, $3, NOW(), NOW()) 
-         RETURNING id, user_id, message, image_data, created_at, updated_at`,
-        [userId, message, imageData]
-      );
+      const confessionData = {
+        user_id: userId,
+        message,
+        image_data: imageData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      return result.rows[0];
+      const { data: confessions, error } = await api.post<HeartConfession[]>('/heart_confessions', confessionData);
+
+      if (error || !confessions || confessions.length === 0) {
+        console.error('Create confession error:', error);
+        return null;
+      }
+
+      return confessions[0];
     } catch (error) {
       console.error('Create confession error:', error);
       return null;
@@ -29,12 +37,16 @@ export const heartsService = {
 
   async getUserConfessions(userId: string): Promise<HeartConfession[]> {
     try {
-      const result = await db.query(
-        'SELECT id, user_id, message, image_data, created_at, updated_at FROM heart_confessions WHERE user_id = $1 ORDER BY created_at DESC',
-        [userId]
+      const { data: confessions, error } = await api.get<HeartConfession[]>(
+        `/heart_confessions?user_id=eq.${userId}&order=created_at.desc`
       );
 
-      return result.rows;
+      if (error) {
+        console.error('Get user confessions error:', error);
+        return [];
+      }
+
+      return confessions || [];
     } catch (error) {
       console.error('Get user confessions error:', error);
       return [];
@@ -43,12 +55,14 @@ export const heartsService = {
 
   async deleteConfession(id: string, userId: string): Promise<boolean> {
     try {
-      const result = await db.query(
-        'DELETE FROM heart_confessions WHERE id = $1 AND user_id = $2',
-        [id, userId]
-      );
+      const { error } = await api.delete(`/heart_confessions?id=eq.${id}&user_id=eq.${userId}`);
 
-      return result.rowCount > 0;
+      if (error) {
+        console.error('Delete confession error:', error);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error('Delete confession error:', error);
       return false;

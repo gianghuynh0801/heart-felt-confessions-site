@@ -1,6 +1,6 @@
 
 import bcrypt from 'bcryptjs';
-import db from './database';
+import { api } from './api';
 
 export interface User {
   id: string;
@@ -19,12 +19,13 @@ export const authService = {
   async signUp(email: string, password: string, name: string): Promise<AuthResponse> {
     try {
       // Check if user already exists
-      const existingUser = await db.query(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
-      );
+      const { data: existingUsers, error: checkError } = await api.get<User[]>(`/profiles?email=eq.${email}`);
+      
+      if (checkError) {
+        return { user: null, error: 'Failed to check existing user' };
+      }
 
-      if (existingUser.rows.length > 0) {
+      if (existingUsers && existingUsers.length > 0) {
         return { user: null, error: 'User already exists with this email' };
       }
 
@@ -32,14 +33,21 @@ export const authService = {
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Create user
-      const result = await db.query(
-        `INSERT INTO users (email, password_hash, name, role, created_at) 
-         VALUES ($1, $2, $3, $4, NOW()) 
-         RETURNING id, email, name, role, created_at`,
-        [email, hashedPassword, name, 'user']
-      );
+      const userData = {
+        email,
+        password_hash: hashedPassword,
+        name,
+        role: 'user',
+        created_at: new Date().toISOString()
+      };
 
-      const user = result.rows[0];
+      const { data: users, error: createError } = await api.post<User[]>('/profiles', userData);
+
+      if (createError || !users || users.length === 0) {
+        return { user: null, error: 'Failed to create account' };
+      }
+
+      const user = users[0];
       return { user, error: null };
     } catch (error) {
       console.error('Signup error:', error);
@@ -49,16 +57,19 @@ export const authService = {
 
   async signIn(email: string, password: string): Promise<AuthResponse> {
     try {
-      const result = await db.query(
-        'SELECT id, email, name, role, password_hash, created_at FROM users WHERE email = $1',
-        [email]
+      const { data: users, error: fetchError } = await api.get<(User & { password_hash: string })[]>(
+        `/profiles?email=eq.${email}`
       );
 
-      if (result.rows.length === 0) {
+      if (fetchError) {
+        return { user: null, error: 'Failed to sign in' };
+      }
+
+      if (!users || users.length === 0) {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      const user = result.rows[0];
+      const user = users[0];
       const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
       if (!isValidPassword) {
@@ -76,12 +87,13 @@ export const authService = {
 
   async getCurrentUser(userId: string): Promise<User | null> {
     try {
-      const result = await db.query(
-        'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
-        [userId]
-      );
+      const { data: users, error } = await api.get<User[]>(`/profiles?id=eq.${userId}`);
 
-      return result.rows[0] || null;
+      if (error || !users || users.length === 0) {
+        return null;
+      }
+
+      return users[0];
     } catch (error) {
       console.error('Get current user error:', error);
       return null;
