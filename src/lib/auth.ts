@@ -39,7 +39,12 @@ export const authService = {
         [email, hashedPassword, name, 'user']
       );
 
-      const user = result.rows[0];
+      const userData = result.rows[0];
+      const user: User = {
+        ...userData,
+        created_at: new Date(userData.created_at)
+      };
+      
       return { user, error: null };
     } catch (error) {
       console.error('Signup error:', error);
@@ -58,16 +63,23 @@ export const authService = {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      const user = result.rows[0];
-      const isValidPassword = await bcrypt.compare(password, user.password_hash);
+      const userData = result.rows[0];
+      const isValidPassword = await bcrypt.compare(password, userData.password_hash);
 
       if (!isValidPassword) {
         return { user: null, error: 'Invalid email or password' };
       }
 
-      // Remove password_hash from response
-      const { password_hash, ...userWithoutPassword } = user;
-      return { user: userWithoutPassword, error: null };
+      // Remove password_hash from response and convert created_at to Date
+      const user: User = {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        created_at: new Date(userData.created_at)
+      };
+      
+      return { user, error: null };
     } catch (error) {
       console.error('Signin error:', error);
       return { user: null, error: 'Failed to sign in' };
@@ -81,7 +93,15 @@ export const authService = {
         [userId]
       );
 
-      return result.rows[0] || null;
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const userData = result.rows[0];
+      return {
+        ...userData,
+        created_at: new Date(userData.created_at)
+      };
     } catch (error) {
       console.error('Get current user error:', error);
       return null;

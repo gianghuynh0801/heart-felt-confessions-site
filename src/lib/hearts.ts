@@ -20,7 +20,12 @@ export const heartsService = {
         [userId, message, imageData]
       );
 
-      return result.rows[0];
+      const confessionData = result.rows[0];
+      return {
+        ...confessionData,
+        created_at: new Date(confessionData.created_at),
+        updated_at: new Date(confessionData.updated_at)
+      };
     } catch (error) {
       console.error('Create confession error:', error);
       return null;
@@ -34,7 +39,11 @@ export const heartsService = {
         [userId]
       );
 
-      return result.rows;
+      return result.rows.map((row: any) => ({
+        ...row,
+        created_at: new Date(row.created_at),
+        updated_at: new Date(row.updated_at)
+      }));
     } catch (error) {
       console.error('Get user confessions error:', error);
       return [];
